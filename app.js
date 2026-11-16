@@ -24,6 +24,13 @@
     mes: '', cuentasMap: {}, archivos: [], movs: [], clasif: {}, tasas: {}, reglas: [],
   };
   try { const g = JSON.parse(localStorage.getItem(CLAVE)); if (g && g.movs) E = Object.assign(E, g); } catch (e) { /* sin almacenamiento */ }
+  // Reglas de fábrica: se agregan una vez por versión (si la administradora borra una, no vuelve)
+  if (window.REGLAS_BASE && (E.reglasVersion || 0) < REGLAS_BASE.version) {
+    const ya = new Set(E.reglas.map((r) => r.texto.toLowerCase()));
+    for (const r of REGLAS_BASE.reglas) if (!ya.has(r.texto.toLowerCase())) E.reglas.push(Object.assign({ beneficiario: '', descripcion: '' }, r));
+    E.reglasVersion = REGLAS_BASE.version;
+    try { localStorage.setItem(CLAVE, JSON.stringify(E)); } catch (e) { /* sin almacenamiento */ }
+  }
   let guardarPend = null;
   function guardar() {
     clearTimeout(guardarPend);
@@ -202,7 +209,7 @@
         <td>${fmtFecha(m.fecha)}</td>
         <td><input type="text" data-campo="factura" value="${esc(c.factura)}" style="min-width:70px"></td>
         <td><input type="text" data-campo="beneficiario" value="${esc(c.beneficiario || (categoria(m).regla || {}).beneficiario || '')}"></td>
-        <td><input type="text" data-campo="descripcion" value="${esc(c.descripcion)}" placeholder="${esc(m.descripcion)}" style="min-width:200px"></td>
+        <td><input type="text" data-campo="descripcion" value="${esc(c.descripcion || (categoria(m).regla || {}).descripcion || '')}" placeholder="${esc(m.descripcion)}" style="min-width:200px"></td>
         <td class="num">${fmt(bs)}</td>
         <td><input type="number" step="0.0001" data-campo="tasa" value="${c.tasa || ''}" placeholder="${t ? t : 'falta'}" style="width:90px;min-width:90px"></td>
         <td class="num"><b>${usd ? fmt(usd) : '—'}</b></td>
@@ -219,10 +226,29 @@
         <div>Total $<b>${fmt(totUsd) || '0,00'}</b></div>
         ${sinTasa ? `<div style="background:var(--warn-soft)">Sin tasa<b>${sinTasa}</b><span class="peq">Cargue las tasas en "Tasas BCV"</span></div>` : ''}
       </div>
+      ${cat === 'fijo' ? tablaComisiones() : ''}
       <div class="tabla-wrap">${lista.length ? `<table>
         <tr><th>Fecha</th><th>Factura</th><th>Beneficiario</th><th>Descripción</th><th class="num">Bolívares</th><th>Tasa</th><th class="num">Monto $</th><th>Referencia</th><th>Banco</th><th>Banco receptor</th><th></th></tr>
         ${filas.join('')}</table>` : `<div class="vacio-msg">No hay movimientos clasificados como "${esc(NOMBRE_CAT[cat])}". Clasifíquelos en la página Extractos bancarios.</div>`}
       </div>`;
+  }
+
+  // Comisiones bancarias del mes agrupadas por cuenta (en el cierre van como una línea por banco en GASTOS FIJOS)
+  function comisionesPorCuenta() {
+    const tot = {};
+    for (const m of E.movs) if (m.debito && categoria(m).cat === 'comision') { const k = cuentaDe(m) || 'SIN CUENTA'; tot[k] = (tot[k] || 0) + m.debito; }
+    const ultima = E.movs.length ? E.movs[E.movs.length - 1].fecha : '';
+    return Object.keys(tot).sort().map((k) => ({ cuenta: k, bs: Math.round(tot[k] * 100) / 100, fecha: ultima, tasa: tasaDe(ultima) }));
+  }
+  function tablaComisiones() {
+    const l = comisionesPorCuenta();
+    if (!l.length) return '';
+    const tBs = l.reduce((s, x) => s + x.bs, 0), tUsd = l.reduce((s, x) => s + (x.tasa ? x.bs / x.tasa : 0), 0);
+    return `<div class="panel"><h2>Comisiones bancarias del mes</h2>
+      <p class="peq">Se suman solas por cuenta y salen en el Excel como "COMISIONES BANCARIAS &lt;CUENTA&gt;", igual que en el cierre. Se usa la tasa del último día.</p>
+      <table><tr><th>Descripción</th><th class="num">Bolívares</th><th class="num">Tasa</th><th class="num">Monto $</th></tr>
+      ${l.map((x) => `<tr><td>COMISIONES BANCARIAS ${esc(x.cuenta)}</td><td class="num">${fmt(x.bs)}</td><td class="num">${x.tasa || '—'}</td><td class="num">${x.tasa ? fmt(x.bs / x.tasa) : '—'}</td></tr>`).join('')}
+      <tr><td><b>Total comisiones</b></td><td class="num"><b>${fmt(tBs)}</b></td><td></td><td class="num"><b>${fmt(tUsd) || '—'}</b></td></tr></table></div>`;
   }
 
   // ---------- render: tasas ----------
@@ -237,9 +263,9 @@
   function renderReglas() {
     $('#rCat').innerHTML = opciones(CATEGORIAS.filter(([v]) => v), 'fijo');
     if (!E.reglas.length) { $('#tablaReglas').innerHTML = '<tr><td class="peq">Todavía no hay reglas. Ejemplo: texto "SERV MTTO POS" → Comisión bancaria.</td></tr>'; return; }
-    $('#tablaReglas').innerHTML = '<tr><th>Si la descripción contiene</th><th>Clasificar como</th><th>Beneficiario</th><th>Coinciden</th><th></th></tr>' + E.reglas.map((r, i) => {
+    $('#tablaReglas').innerHTML = '<tr><th>Si la descripción contiene</th><th>Clasificar como</th><th>Beneficiario</th><th>Descripción</th><th class="num">Coinciden este mes</th><th></th></tr>' + E.reglas.map((r, i) => {
       const n = E.movs.filter((m) => m.debito && m.descripcion.toLowerCase().includes(r.texto.toLowerCase())).length;
-      return `<tr><td><b>${esc(r.texto)}</b></td><td>${esc(NOMBRE_CAT[r.cat])}</td><td>${esc(r.beneficiario)}</td><td class="num">${n}</td><td><button class="x" data-borrar-regla="${i}">✕</button></td></tr>`;
+      return `<tr><td><b>${esc(r.texto)}</b></td><td>${esc(NOMBRE_CAT[r.cat])}</td><td>${esc(r.beneficiario)}</td><td>${esc(r.descripcion)}</td><td class="num">${n}</td><td><button class="x" data-borrar-regla="${i}">✕</button></td></tr>`;
     }).join('');
   }
 
@@ -284,9 +310,15 @@
         const c = E.clasif[m.id] || {};
         const r = i + 5;
         const t = c.tasa || tasaDe(m.fecha) || null;
-        filas.push([fechaExcel(m.fecha), c.factura || '', c.beneficiario || (categoria(m).regla || {}).beneficiario || '', c.descripcion || m.descripcion, m.debito || m.credito, t, t ? { f: `+E${r}/F${r}` } : null, m.referencia, cuentaDe(m), c.receptor || '']);
+        filas.push([fechaExcel(m.fecha), c.factura || '', c.beneficiario || (categoria(m).regla || {}).beneficiario || '', c.descripcion || (categoria(m).regla || {}).descripcion || m.descripcion, m.debito || m.credito, t, t ? { f: `+E${r}/F${r}` } : null, m.referencia, cuentaDe(m), c.receptor || '']);
       });
-      const fin = lista.length + 4;
+      let fin = lista.length + 4;
+      if (cat === 'fijo') {
+        for (const x of comisionesPorCuenta()) {
+          fin++;
+          filas.push([x.fecha ? fechaExcel(x.fecha) : '', '', '', 'COMISIONES BANCARIAS ' + x.cuenta, x.bs, x.tasa || null, x.tasa ? { f: `+E${fin}/F${fin}` } : null, '', x.cuenta, '']);
+        }
+      }
       filas.push([], ['', '', '', 'TOTAL', { f: `SUM(E5:E${fin})` }, '', { f: `SUM(G5:G${fin})` }]);
       const ws = XLSX.utils.aoa_to_sheet(filas);
       formato(ws, filas.length, { A: 'dd/mm/yyyy', E: '#,##0.00', F: '#,##0.0000', G: '#,##0.00' });
@@ -376,7 +408,7 @@
   $('#rAgregar').addEventListener('click', () => {
     const texto = $('#rTexto').value.trim();
     if (!texto) return toast('Escriba el texto de la regla');
-    E.reglas.push({ texto, cat: $('#rCat').value, beneficiario: $('#rBenef').value.trim() });
+    E.reglas.push({ texto, cat: $('#rCat').value, beneficiario: $('#rBenef').value.trim(), descripcion: '' });
     $('#rTexto').value = ''; $('#rBenef').value = '';
     guardar(); render(); toast('Regla agregada');
   });
