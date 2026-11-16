@@ -1,0 +1,6 @@
+*.json
+!package.json
+.DS_Store
+# no subir extractos bancarios
+extractos/
+*.pdf
