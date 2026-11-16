@@ -63,6 +63,9 @@
   .vacio-msg { padding: 30px; text-align: center; color: var(--muted); }
   .x { border: 0; background: none; cursor: pointer; color: var(--muted); font-size: 16px; }
   .x:hover { color: var(--red); }
+  .recordar { margin-left: 6px; border: 1px solid var(--line); background: #fff; color: var(--accent); border-radius: 6px; padding: 4px 8px; font-size: 12px; cursor: pointer; }
+  .recordar:hover { background: var(--accent-soft); border-color: var(--accent); }
+  .clasif.vacio + .recordar, .clasif.auto + .recordar, .clasif.c-ingreso + .recordar { visibility: hidden; }
   #toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: #12233f; color: #fff; padding: 10px 18px; border-radius: 8px; opacity: 0; transition: opacity .2s; pointer-events: none; z-index: 10; }
   #toast.ver { opacity: 1; }
   .fila-flex { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }

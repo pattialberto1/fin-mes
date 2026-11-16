@@ -26,6 +26,8 @@ Funciona en el navegador (Chrome o Edge) y no hay que instalar nada. **Los datos
 
 En la página **Reglas automáticas** se guardan textos que se repiten. Por ejemplo, si la descripción del banco contiene `CORPOELEC`, se clasifica como Gasto fijo con el beneficiario CORPOELEC. Desde ese momento esos pagos llegan ya clasificados cada mes.
 
+**Botón "Recordar":** después de clasificar un egreso, el botón **Recordar** que aparece a su lado crea la regla en un clic. Si el banco muestra la cédula o el RIF (por ejemplo `TRFMB 0134 V024635876 LOZANO RODRIGUEZ`), la regla usa ese número. Si no, usa la descripción sin los números. Si la descripción es genérica ("Banesco Pago Movil", "Transf. Internet Terceros"…), avisa y no crea la regla, porque clasificaría mal otros pagos. En las páginas de gastos, Recordar también guarda el beneficiario y la descripción que se hayan escrito.
+
 La herramienta trae **33 reglas de fábrica**, sacadas de los extractos de noviembre y del cierre de octubre (archivo `app/reglas-base.js`):
 - **Gastos fijos:** CORPOELEC, SENIAT, impuestos de la Alcaldía Libertador (SUMAR), DIGITEL, CANTV, HIDROCAPITAL, SIMPLE TV, IVSS, FAOV/BANAVIH.
 - **Compras:** proveedores habituales. En Banesco se reconocen por el RIF (Pollo Premium, Lácteos Flor de Catia, Brostihouse, Disjobel) y en los demás bancos por el nombre (Coca Cola, Tierra Santa, Il Piacere, Pollo Dorado, etc.).
