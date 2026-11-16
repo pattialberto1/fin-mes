@@ -232,7 +232,7 @@
       const lim = limiteTrans || 235;
       for (const a of anclas) {
         const desc = items
-          .filter((i) => i.x >= lim && i.x < a.signoX - 2 && Math.abs(i.y - a.y) <= 14)
+          .filter((i) => i.x >= lim && i.x < a.signoX - 2 && Math.abs(i.y - a.y) <= 18)
           .filter((i) => anclas.every((b) => b === a || Math.abs(i.y - a.y) <= Math.abs(i.y - b.y)))
           .sort((x, y) => y.y - x.y || x.x - y.x)
           .map((i) => i.s).join(' ');

@@ -26,6 +26,13 @@ Funciona en el navegador (Chrome o Edge) y no hay que instalar nada. **Los datos
 
 En la página **Reglas automáticas** se guardan textos que se repiten. Por ejemplo, si la descripción del banco contiene `CORPOELEC`, se clasifica como Gasto fijo con el beneficiario CORPOELEC. Desde ese momento esos pagos llegan ya clasificados cada mes.
 
+La herramienta trae **33 reglas de fábrica**, sacadas de los extractos de noviembre y del cierre de octubre (archivo `app/reglas-base.js`):
+- **Gastos fijos:** CORPOELEC, SENIAT, impuestos de la Alcaldía Libertador (SUMAR), DIGITEL, CANTV, HIDROCAPITAL, SIMPLE TV, IVSS, FAOV/BANAVIH.
+- **Compras:** proveedores habituales. En Banesco se reconocen por el RIF (Pollo Premium, Lácteos Flor de Catia, Brostihouse, Disjobel) y en los demás bancos por el nombre (Coca Cola, Tierra Santa, Il Piacere, Pollo Dorado, etc.).
+- **Comisiones:** mantenimiento de la tarjeta de débito ("SERV AL CLIENTE"), comisiones de transferencias en Mercantil, y la comisión que Banesco cobra con la misma referencia del pago móvil.
+
+Las comisiones bancarias se suman por cuenta y aparecen en Gastos fijos como "COMISIONES BANCARIAS <CUENTA>", igual que en el cierre.
+
 ### Respaldo
 
 El trabajo se guarda solo en el navegador de esa computadora. **Guardar respaldo** descarga un archivo `.json` que sirve para pasar el trabajo a otra computadora o recuperarlo con **Abrir respaldo**.
