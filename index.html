@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fin de Mes</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --panel: #fff; --text: #1d2330; --muted: #6b7280; --line: #e3e6eb;
+    --accent: #1f6feb; --accent-soft: #e8f0fe; --warn: #b45309; --warn-soft: #fef3c7;
+    --ok: #15803d; --ok-soft: #dcfce7; --red: #b91c1c;
+    --fijo: #7c3aed; --extra: #db2777; --compra: #0891b2;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 14px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--text); }
+  header { background: #12233f; color: #fff; padding: 10px 20px; display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+  header h1 { font-size: 18px; margin: 0; font-weight: 600; }
+  header .mes { display: flex; align-items: center; gap: 6px; font-size: 13px; }
+  header .mes input { width: 160px; padding: 4px 8px; border-radius: 6px; border: 0; font-weight: 600; }
+  header .acciones { margin-left: auto; display: flex; gap: 8px; flex-wrap: wrap; }
+  nav { display: flex; gap: 2px; padding: 0 20px; background: #fff; border-bottom: 1px solid var(--line); overflow-x: auto; }
+  nav button { border: 0; background: none; padding: 12px 16px; font-size: 14px; cursor: pointer; color: var(--muted); border-bottom: 3px solid transparent; white-space: nowrap; }
+  nav button.activo { color: var(--text); border-bottom-color: var(--accent); font-weight: 600; }
+  nav .badge { display: inline-block; min-width: 20px; padding: 0 6px; border-radius: 10px; background: var(--line); color: var(--text); font-size: 12px; margin-left: 4px; }
+  main { padding: 16px 20px 60px; }
+  .pagina { display: none; } .pagina.activa { display: block; }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; margin-bottom: 14px; }
+  .btn { border: 1px solid var(--line); background: #fff; color: var(--text); padding: 7px 12px; border-radius: 7px; cursor: pointer; font-size: 13px; }
+  .btn:hover { border-color: #b8bec8; }
+  .btn.primario { background: var(--accent); border-color: var(--accent); color: #fff; }
+  header .btn { background: rgba(255,255,255,.12); border-color: rgba(255,255,255,.25); color: #fff; }
+  header .btn.primario { background: #2ea043; border-color: #2ea043; }
+  .zona { border: 2px dashed #b8c4d6; border-radius: 10px; padding: 18px; text-align: center; color: var(--muted); cursor: pointer; background: #fbfcfe; }
+  .zona.encima { border-color: var(--accent); background: var(--accent-soft); }
+  .zona b { color: var(--text); }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { padding: 6px 8px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: middle; }
+  th { font-size: 12px; text-transform: uppercase; letter-spacing: .02em; color: var(--muted); background: #fafbfc; position: sticky; top: 0; z-index: 1; }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .tabla-wrap { max-height: calc(100vh - 290px); overflow: auto; border: 1px solid var(--line); border-radius: 8px; background: #fff; }
+  tr.egreso td.monto-e { color: var(--red); }
+  tr.ingreso td.monto-i { color: var(--ok); }
+  td.desc { max-width: 380px; }
+  .peq { font-size: 12px; color: var(--muted); }
+  select, input[type=text], input[type=number] { font: inherit; padding: 5px 7px; border: 1px solid var(--line); border-radius: 6px; background: #fff; }
+  td input[type=text], td input[type=number] { width: 100%; min-width: 80px; }
+  .clasif { width: 150px; font-weight: 600; }
+  .clasif.c-fijo { border-color: var(--fijo); color: var(--fijo); background: #f5f0ff; }
+  .clasif.c-extra { border-color: var(--extra); color: var(--extra); background: #fdf0f6; }
+  .clasif.c-compra { border-color: var(--compra); color: var(--compra); background: #ecfbfe; }
+  .clasif.vacio { border-color: var(--warn); background: var(--warn-soft); }
+  .clasif.auto { font-weight: 400; font-style: italic; }
+  .filtros { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 10px; }
+  .chips { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+  .chips button { border: 0; background: #fff; padding: 6px 10px; cursor: pointer; font-size: 13px; border-right: 1px solid var(--line); }
+  .chips button:last-child { border-right: 0; }
+  .chips button.activo { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+  .cuentas td { padding: 6px 8px; }
+  .aviso { background: var(--warn-soft); color: #78350f; border-radius: 8px; padding: 8px 12px; margin-top: 8px; }
+  .totales { display: flex; gap: 24px; flex-wrap: wrap; margin-bottom: 10px; }
+  .totales div { background: #fff; border: 1px solid var(--line); border-radius: 8px; padding: 8px 14px; }
+  .totales b { display: block; font-size: 18px; font-variant-numeric: tabular-nums; }
+  .vacio-msg { padding: 30px; text-align: center; color: var(--muted); }
+  .x { border: 0; background: none; cursor: pointer; color: var(--muted); font-size: 16px; }
+  .x:hover { color: var(--red); }
+  #toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: #12233f; color: #fff; padding: 10px 18px; border-radius: 8px; opacity: 0; transition: opacity .2s; pointer-events: none; z-index: 10; }
+  #toast.ver { opacity: 1; }
+  .fila-flex { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  h2 { font-size: 16px; margin: 0 0 10px; }
+  .sin-cuenta { color: var(--warn); font-weight: 600; }
+  @media (max-width: 700px) { main { padding: 12px; } header { padding: 10px 12px; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>Fin de Mes</h1>
+  <label class="mes">Mes: <input id="mes" type="text" placeholder="NOVIEMBRE 2026"></label>
+  <div class="acciones">
+    <button class="btn primario" id="exportar">Descargar Excel</button>
+    <button class="btn" id="respaldo">Guardar respaldo</button>
+    <button class="btn" id="restaurar">Abrir respaldo</button>
+    <button class="btn" id="nuevoMes">Empezar mes nuevo</button>
+    <input type="file" id="archivoRespaldo" accept=".json" hidden>
+  </div>
+</header>
+<nav id="tabs">
+  <button data-p="extractos" class="activo">Extractos bancarios <span class="badge" id="b-pend"></span></button>
+  <button data-p="fijo">Gastos fijos <span class="badge" id="b-fijo"></span></button>
+  <button data-p="extra">Gastos extras <span class="badge" id="b-extra"></span></button>
+  <button data-p="compra">Compras <span class="badge" id="b-compra"></span></button>
+  <button data-p="tasas">Tasas BCV</button>
+  <button data-p="reglas">Reglas automáticas</button>
+</nav>
+<main>
+  <section class="pagina activa" id="p-extractos">
+    <div class="panel">
+      <div class="zona" id="zona">
+        <b>Arrastre aquí los extractos de todos los bancos</b> (o haga clic para elegirlos)<br>
+        <span class="peq">Banesco (.xls), Bancamiga (.xls), Bancaribe (PDF o Excel), Mercantil (Excel)… puede soltar varios a la vez. Si carga un archivo dos veces, los movimientos repetidos se ignoran.</span>
+      </div>
+      <input type="file" id="archivos" multiple hidden accept=".xls,.xlsx,.csv,.pdf,.html,.htm">
+      <div id="avisos"></div>
+      <table class="cuentas" id="tablaCuentas" style="margin-top:10px"></table>
+    </div>
+    <div class="filtros">
+      <span class="chips" id="fTipo">
+        <button data-v="egreso" class="activo">Egresos</button><button data-v="ingreso">Ingresos</button><button data-v="todos">Todos</button>
+      </span>
+      <span class="chips" id="fEstado">
+        <button data-v="pendiente">Sin clasificar</button><button data-v="todos" class="activo">Todos</button>
+      </span>
+      <select id="fCuenta"><option value="">Todas las cuentas</option></select>
+      <input type="text" id="fTexto" placeholder="Buscar descripción, referencia o monto…" style="min-width:240px">
+      <label class="peq"><input type="checkbox" id="fComisiones"> Mostrar comisiones</label>
+      <span class="peq" id="conteo"></span>
+    </div>
+    <div class="tabla-wrap"><table id="tablaMovs"></table></div>
+  </section>
+
+  <section class="pagina" id="p-fijo"></section>
+  <section class="pagina" id="p-extra"></section>
+  <section class="pagina" id="p-compra"></section>
+
+  <section class="pagina" id="p-tasas">
+    <div class="panel">
+      <h2>Tasa del dólar (BCV) por día</h2>
+      <p class="peq">Escriba la tasa de cada día. Se usa para calcular el MONTO en $ de los gastos y compras de ese día (Bolívares ÷ Tasa). Si un día no tiene tasa se usa la del día anterior más cercano.</p>
+      <div class="tabla-wrap" style="max-width:520px"><table id="tablaTasas"></table></div>
+    </div>
+  </section>
+
+  <section class="pagina" id="p-reglas">
+    <div class="panel">
+      <h2>Reglas automáticas</h2>
+      <p class="peq">Si la descripción del banco contiene el texto, el egreso se clasifica solo. Usted siempre puede cambiarlo a mano. Las comisiones bancarias y los ingresos se clasifican automáticamente.</p>
+      <div class="fila-flex" style="margin-bottom:10px">
+        <input type="text" id="rTexto" placeholder="Texto que contiene (ej: WOW, POLLO PREMIUM)" style="min-width:280px">
+        <select id="rCat"></select>
+        <input type="text" id="rBenef" placeholder="Beneficiario (opcional)">
+        <button class="btn primario" id="rAgregar">Agregar regla</button>
+      </div>
+      <table id="tablaReglas"></table>
+    </div>
+  </section>
+</main>
+<div id="toast"></div>
+
+<script src="lib/xlsx.full.min.js"></script>
+<script src="lib/pdf.worker.min.js"></script>
+<script src="lib/pdf.min.js"></script>
+<script src="parsers.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
