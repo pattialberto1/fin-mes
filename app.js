@@ -185,7 +185,7 @@
         <td class="desc">${esc(m.descripcion)}</td>
         <td class="num monto-e">${m.debito ? fmt(m.debito) : ''}</td>
         <td class="num monto-i">${m.credito ? fmt(m.credito) : ''}</td>
-        <td><select class="clasif ${clase}" data-id="${esc(m.id)}" title="${c.auto ? 'Clasificado automáticamente' : ''}">${opciones(CATEGORIAS, c.cat)}</select></td>
+        <td><select class="clasif ${clase}" data-id="${esc(m.id)}" title="${c.auto ? 'Clasificado automáticamente' : ''}">${opciones(CATEGORIAS, c.cat)}</select>${m.debito ? `<button class="recordar" data-recordar="${esc(m.id)}" title="Crear una regla para que los próximos pagos como este se clasifiquen solos">Recordar</button>` : ''}</td>
       </tr>`;
     });
     $('#tablaMovs').innerHTML = `<tr><th>Fecha</th><th>Cuenta</th><th>Referencia</th><th>Descripción del banco</th><th class="num">Egreso Bs</th><th class="num">Ingreso Bs</th><th>Clasificación</th></tr>` +
@@ -216,7 +216,7 @@
         <td class="peq">${esc(m.referencia)}</td>
         <td class="peq">${esc(cuentaDe(m))}</td>
         <td><input type="text" data-campo="receptor" value="${esc(c.receptor)}" style="min-width:90px"></td>
-        <td><button class="x" data-devolver="${esc(m.id)}" title="Quitar de esta página (vuelve a Extractos sin clasificar)">↩</button></td>
+        <td style="white-space:nowrap"><button class="recordar" data-recordar="${esc(m.id)}" title="Crear una regla para que los próximos pagos como este se clasifiquen solos (con este beneficiario y descripción)">Recordar</button><button class="x" data-devolver="${esc(m.id)}" title="Quitar de esta página (vuelve a Extractos sin clasificar)">↩</button></td>
       </tr>`;
     });
     el.innerHTML = `
@@ -283,6 +283,35 @@
     if (HOJA[activa]) renderCat(activa);
     if (activa === 'tasas') renderTasas();
     if (activa === 'reglas') renderReglas();
+  }
+
+  // ---------- botón "Recordar": crea una regla a partir de un movimiento ----------
+  // Usa la cédula o el RIF si la descripción lo trae (TRFMB 0134 V024635876 LOZANO RODRIGUEZ),
+  // si no, la descripción sin números (CORPOELEC REC EN LINEA 000001000019931963 -> CORPOELEC REC EN LINEA).
+  const GENERICAS = /^(banesco )?pago movil|pago movil (realizado|cce)|transf(erencia)?\.? (internet|inmediata)|^nd |deposito a terceros|consumos|pago t\.?d\.?c|transf entre ctas|credito inmediato|^tdd - administracion/i;
+  function recordar(id) {
+    const m = E.movs.find((x) => x.id === id);
+    const c = categoria(m), cl = E.clasif[id] || {};
+    if (!c.cat || c.cat === 'ingreso') return toast('Primero elija la clasificación de este movimiento');
+    const idDoc = m.descripcion.match(/\b[JVEGP]\d{7,10}\b/i);
+    let texto = idDoc ? idDoc[0].toUpperCase() : m.descripcion.replace(/\b\d[\d\-\/.]*\b/g, ' ').replace(/\s+/g, ' ').trim();
+    if (!idDoc && GENERICAS.test(texto)) {
+      alert('La descripción "' + m.descripcion + '" es genérica: el banco la usa para pagos distintos (no dice a quién se pagó). Una regla con ese texto clasificaría mal otros pagos, así que este hay que clasificarlo a mano cada mes.');
+      return;
+    }
+    texto = prompt('Los próximos egresos cuya descripción contenga este texto se clasificarán como "' + NOMBRE_CAT[c.cat] + '".\nPuede acortarlo o corregirlo:', texto);
+    if (!texto || !texto.trim()) return;
+    texto = texto.trim();
+    const nombre = idDoc ? m.descripcion.slice(idDoc.index + idDoc[0].length).replace(/\s\d+\s*$/, '').trim() : '';
+    const benef = cl.beneficiario || (c.regla || {}).beneficiario || nombre;
+    const desc = cl.descripcion || (c.regla || {}).descripcion || '';
+    const coinciden = E.movs.filter((x) => x.debito && x.descripcion.toLowerCase().includes(texto.toLowerCase()));
+    const otros = coinciden.filter((x) => x.id !== id && !(E.clasif[x.id] && typeof E.clasif[x.id].cat === 'string'));
+    const previa = E.reglas.findIndex((r) => r.texto.toLowerCase() === texto.toLowerCase());
+    const regla = { texto, cat: c.cat, beneficiario: benef, descripcion: desc };
+    if (previa >= 0) E.reglas[previa] = regla; else E.reglas.unshift(regla);
+    guardar(); render();
+    toast('Regla guardada: "' + texto + '" → ' + NOMBRE_CAT[c.cat] + (otros.length ? ' (+' + otros.length + ' movimientos este mes)' : ''));
   }
 
   // ---------- exportar a Excel ----------
@@ -389,7 +418,9 @@
 
   document.addEventListener('click', (e) => {
     const t = e.target;
-    if (t.dataset.devolver) {
+    if (t.dataset.recordar) {
+      recordar(t.dataset.recordar);
+    } else if (t.dataset.devolver) {
       const id = t.dataset.devolver; E.clasif[id] = Object.assign(E.clasif[id] || {}, { cat: '' });
       guardar(); render(); toast('Devuelto a Extractos');
     } else if (t.dataset.quitar) {
