@@ -281,5 +281,24 @@
     throw new Error('No se reconoció el formato de este archivo.');
   }
 
-  global.Extractos = { leerArchivo, num, fecha };
+  // Excel oficial del BCV (2_1_2xYY_smc.xls): una hoja por día con "Fecha Valor: dd/mm/aaaa"
+  // y la fila USD. Se toma Bs./M.E. Venta (ASK), que es la que se usa en el cierre de mes.
+  function leerTasasBCV(buf) {
+    const wb = XLSX.read(new Uint8Array(buf), { type: 'array' });
+    const tasas = {};
+    for (const n of wb.SheetNames) {
+      const m = XLSX.utils.sheet_to_json(wb.Sheets[n], { header: 1, raw: true, defval: '' });
+      const fv = m.flat().map(String).find((c) => /fecha valor/i.test(c));
+      const f = fv && fecha((fv.match(/\d{1,2}\/\d{1,2}\/\d{4}/) || [])[0]);
+      const usd = m.find((r) => r.some((c) => String(c).trim().toUpperCase() === 'USD'));
+      if (!f || !usd) continue;
+      const nums = usd.map(num).filter((x) => x > 0);
+      const venta = nums[nums.length - 1]; // última columna: Bs./M.E. Venta (ASK)
+      if (venta > 1) tasas[f] = venta;
+    }
+    if (!Object.keys(tasas).length) throw new Error('No parece el archivo de tipo de cambio del BCV.');
+    return tasas;
+  }
+
+  global.Extractos = { leerArchivo, leerTasasBCV, num, fecha };
 })(window);
