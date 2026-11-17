@@ -127,8 +127,13 @@
   <section class="pagina" id="p-tasas">
     <div class="panel">
       <h2>Tasa del dólar (BCV) por día</h2>
-      <p class="peq">Escriba la tasa de cada día. Se usa para calcular el MONTO en $ de los gastos y compras de ese día (Bolívares ÷ Tasa). Si un día no tiene tasa se usa la del día anterior más cercano.</p>
-      <div class="tabla-wrap" style="max-width:520px"><table id="tablaTasas"></table></div>
+      <p class="peq">Tipo de cambio de referencia oficial del BCV (Bs./US$, Venta), según la <b>Fecha Valor</b>. Se usa para calcular el MONTO en $ de los gastos y compras (Bolívares ÷ Tasa). Los fines de semana y feriados usan la tasa del último día hábil. Si hace falta, puede corregir un día a mano.</p>
+      <div class="fila-flex" style="margin-bottom:10px">
+        <button class="btn primario" id="importarBCV">Importar Excel del BCV</button>
+        <span class="peq">Para días nuevos: en bcv.org.ve → Estadísticas → Tipo de cambio de referencia, descargue el archivo del trimestre (ej. 2_1_2d26_smc.xls) y ábralo aquí.</span>
+        <input type="file" id="archivoBCV" accept=".xls,.xlsx" hidden>
+      </div>
+      <div class="tabla-wrap" style="max-width:640px"><table id="tablaTasas"></table></div>
     </div>
   </section>
 
@@ -153,6 +158,7 @@
 <script src="lib/pdf.min.js"></script>
 <script src="parsers.js"></script>
 <script src="reglas-base.js"></script>
+<script src="tasas-bcv.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

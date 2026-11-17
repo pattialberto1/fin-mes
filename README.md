@@ -18,7 +18,7 @@ Funciona en el navegador (Chrome o Edge) y no hay que instalar nada. **Los datos
    - Las comisiones bancarias y los ingresos (ventas, puntos de venta, pagos móviles recibidos) se clasifican solos, en letra cursiva. Se pueden cambiar a mano.
    - El botón **Sin clasificar** muestra solo lo que falta por revisar.
 4. En **Gastos fijos / Gastos extras / Compras** se completan la factura, el beneficiario y la descripción.
-5. En **Tasas BCV** se escribe la tasa de cada día. Con ella se calcula el monto en dólares.
+5. **Tasas BCV:** la herramienta ya trae las tasas oficiales del BCV (Bs/$, Venta, por Fecha Valor) del 01/10/2026 al 17/11/2026. Los fines de semana y feriados usan la tasa del último día hábil. Para los días nuevos, se descarga de bcv.org.ve → Estadísticas → Tipo de cambio de referencia el Excel del trimestre (ej. `2_1_2d26_smc.xls`) y se abre con el botón **Importar Excel del BCV**. Cualquier día se puede corregir a mano.
 6. **Descargar Excel**: genera un archivo con las hojas EXTRACTOS, GASTOS FIJOS, GASTOS EXTRAS y COMPRAS, con las mismas columnas del cierre (el MONTO lleva la fórmula Bolívares ÷ Tasa).
 7. **Empezar mes nuevo** borra los movimientos y conserva las cuentas y las reglas.
 

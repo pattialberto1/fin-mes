@@ -80,8 +80,20 @@
     return set;
   }
 
+  // Tasas oficiales: las que trae la herramienta (tasas-bcv.js) + las importadas del Excel del BCV.
+  function oficiales() { return Object.assign({}, window.TASAS_BCV || {}, E.tasasBCV || {}); }
+  // Tasa oficial del día; fines de semana y feriados usan la del último día hábil anterior.
+  function tasaOficial(fecha) {
+    const o = oficiales();
+    if (o[fecha]) return { tasa: o[fecha], fecha };
+    const prev = Object.keys(o).filter((f) => f < fecha).sort().pop();
+    return prev ? { tasa: o[prev], fecha: prev } : { tasa: 0, fecha: '' };
+  }
+  // Prioridad: tasa escrita a mano ese día > oficial del BCV > última escrita a mano
   function tasaDe(fecha) {
     if (E.tasas[fecha]) return E.tasas[fecha];
+    const of = tasaOficial(fecha).tasa;
+    if (of) return of;
     const prev = Object.keys(E.tasas).filter((f) => f < fecha && E.tasas[f]).sort().pop();
     return prev ? E.tasas[prev] : 0;
   }
@@ -252,11 +264,27 @@
   }
 
   // ---------- render: tasas ----------
+  const DIAS = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
+  const iso = (d) => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
   function renderTasas() {
-    const fechas = [...new Set(E.movs.map((m) => m.fecha).concat(Object.keys(E.tasas)))].sort();
-    if (!fechas.length) { $('#tablaTasas').innerHTML = '<tr><td class="vacio-msg">Cargue extractos primero.</td></tr>'; return; }
-    $('#tablaTasas').innerHTML = '<tr><th>Fecha</th><th>Tasa Bs/$</th><th class="peq">Se usará</th></tr>' + fechas.map((f) =>
-      `<tr><td>${fmtFecha(f)}</td><td><input type="number" step="0.0001" data-tasa="${f}" value="${E.tasas[f] || ''}"></td><td class="peq">${E.tasas[f] ? '' : (tasaDe(f) ? tasaDe(f) + ' (día anterior)' : 'sin tasa')}</td></tr>`).join('');
+    // Todos los días del mes de trabajo, desde el día 1 hasta hoy (o el último movimiento)
+    const hoy = iso(new Date());
+    const base = E.movs.length ? E.movs[0].fecha : hoy;
+    const ultimo = E.movs.length ? E.movs[E.movs.length - 1].fecha : hoy;
+    let fin = ultimo > hoy ? ultimo : hoy;
+    const finMes = iso(new Date(+base.slice(0, 4), +base.slice(5, 7), 0));
+    if (fin > finMes && ultimo <= finMes) fin = finMes;
+    const fechas = new Set(E.movs.map((m) => m.fecha).concat(Object.keys(E.tasas)));
+    for (let d = new Date(+base.slice(0, 4), +base.slice(5, 7) - 1, 1); iso(d) <= fin; d.setDate(d.getDate() + 1)) fechas.add(iso(d));
+    const o = oficiales();
+    $('#tablaTasas').innerHTML = '<tr><th>Fecha</th><th>Día</th><th class="num">Oficial BCV</th><th>Corregir a mano</th><th class="num">Se usa</th></tr>' + [...fechas].sort().map((f) => {
+      const of = tasaOficial(f);
+      const dia = DIAS[new Date(+f.slice(0, 4), +f.slice(5, 7) - 1, +f.slice(8, 10)).getDay()];
+      const nota = o[f] ? '' : of.tasa ? `<span class="peq"> (del ${fmtFecha(of.fecha)})</span>` : '';
+      return `<tr><td>${fmtFecha(f)}</td><td class="peq">${dia}</td><td class="num">${of.tasa ? of.tasa.toLocaleString('es-VE', { minimumFractionDigits: 4 }) + nota : '<span class="sin-cuenta">falta</span>'}</td>
+        <td><input type="number" step="0.0001" data-tasa="${f}" value="${E.tasas[f] || ''}" placeholder="—" style="width:110px"></td>
+        <td class="num"><b>${tasaDe(f) ? tasaDe(f).toLocaleString('es-VE', { minimumFractionDigits: 4 }) : '—'}</b></td></tr>`;
+    }).join('');
   }
 
   // ---------- render: reglas ----------
@@ -442,6 +470,18 @@
     E.reglas.push({ texto, cat: $('#rCat').value, beneficiario: $('#rBenef').value.trim(), descripcion: '' });
     $('#rTexto').value = ''; $('#rBenef').value = '';
     guardar(); render(); toast('Regla agregada');
+  });
+
+  $('#importarBCV').addEventListener('click', () => $('#archivoBCV').click());
+  $('#archivoBCV').addEventListener('change', async (e) => {
+    try {
+      const t = Extractos.leerTasasBCV(await e.target.files[0].arrayBuffer());
+      E.tasasBCV = Object.assign(E.tasasBCV || {}, t);
+      const fs = Object.keys(t).sort();
+      guardar(); render();
+      toast(`${fs.length} tasas cargadas (${fmtFecha(fs[0])} al ${fmtFecha(fs[fs.length - 1])})`);
+    } catch (err) { toast(err.message || 'No se pudo leer el archivo'); }
+    e.target.value = '';
   });
 
   $('#exportar').addEventListener('click', exportar);
