@@ -10,20 +10,38 @@
     ['compra', 'Compra'],
     ['ingreso', 'Ingreso / venta'],
     ['comision', 'Comisión bancaria'],
-    ['socio', 'Aporte / vale socio'],
+    ['socio', 'Vale / anticipo socio'],
     ['traspaso', 'Traspaso entre cuentas'],
     ['otro', 'Otro (no contar)'],
   ];
   const NOMBRE_CAT = Object.fromEntries(CATEGORIAS);
-  const HOJA = { fijo: 'GASTOS FIJOS', extra: 'GASTOS EXTRAS', compra: 'COMPRAS' };
+  const HOJA = { fijo: 'GASTOS FIJOS', extra: 'GASTOS EXTRAS', compra: 'COMPRAS', socio: 'ANTICIPO SOCIOS' };
   const RE_COMISION = /(^|\s)com(\.|\s)|comisi[oó]n|^comis |emisi[oó]n edo|cobro por procesamiento|serv mtto pos|emisi[oó]n de estado de cuenta/i;
   const CLAVE = 'finmes-v1';
 
   // ---------- estado ----------
-  let E = {
+  const nuevoEstado = () => ({
     mes: '', cuentasMap: {}, archivos: [], movs: [], clasif: {}, tasas: {}, reglas: [],
-  };
+    // Cierre de mes
+    manuales: { fijo: [], extra: [], compra: [], socio: [] }, // filas agregadas a mano (pagos en divisas/efectivo)
+    ventas: {}, ajustesDivisas: [], bancosManual: {}, efectivoBs: 0, divisas: 0,
+    inventario: null, invAnterior: null, socios: null, reparto: { reserva: 10000, valeDivisa: {}, banesco: {} }, tasaCierre: 0,
+  });
+  let E = nuevoEstado();
   try { const g = JSON.parse(localStorage.getItem(CLAVE)); if (g && g.movs) E = Object.assign(E, g); } catch (e) { /* sin almacenamiento */ }
+  function completarEstado() {
+    const d = nuevoEstado();
+    for (const k in d) if (E[k] === undefined) E[k] = d[k];
+    for (const k in d.manuales) E.manuales[k] = E.manuales[k] || [];
+    E.reparto = Object.assign(d.reparto, E.reparto);
+    // Inventario y socios de partida (del cierre de octubre)
+    if (!E.inventario && window.INVENTARIO_BASE) {
+      E.inventario = INVENTARIO_BASE.items.map((i, k) => ({ id: 'p' + k, nombre: i.nombre, unidad: i.unidad, cant: i.cant, precio: i.precio, bultos: 0, unidades: 0 }));
+      E.invAnterior = { mes: INVENTARIO_BASE.mes, total: INVENTARIO_BASE.total, items: Object.fromEntries(INVENTARIO_BASE.items.map((i) => [i.nombre, { bultos: i.bultos, unidades: i.unidades }])) };
+    }
+    if (!E.socios) E.socios = (window.SOCIOS_BASE || []).slice();
+  }
+  completarEstado();
   // Reglas de fábrica: se agregan una vez por versión (si la administradora borra una, no vuelve)
   if (window.REGLAS_BASE && (E.reglasVersion || 0) < REGLAS_BASE.version) {
     const ya = new Set(E.reglas.map((r) => r.texto.toLowerCase()));
@@ -204,45 +222,154 @@
       filas.join('') + (lista.length > MAX ? `<tr><td colspan="7" class="peq">Mostrando ${MAX} de ${lista.length}. Use los filtros para ver el resto.</td></tr>` : '');
   }
 
-  // ---------- render: páginas de gastos ----------
-  function filasCat(cat) { return E.movs.filter((m) => categoria(m).cat === cat); }
-
-  function renderCat(cat) {
-    const lista = filasCat(cat);
-    const el = $('#p-' + cat);
-    let totBs = 0, totUsd = 0, sinTasa = 0;
-    const filas = lista.map((m) => {
-      const c = E.clasif[m.id] || {};
+  // ---------- filas de cada página (movimientos del banco + filas agregadas a mano) ----------
+  const r2 = (n) => Math.round(n * 100) / 100;
+  function items(cat) {
+    const out = [];
+    for (const m of E.movs) {
+      const cg = categoria(m);
+      if (cg.cat !== cat) continue;
+      const c = E.clasif[m.id] || {}, regla = cg.regla || {};
       const bs = m.debito || m.credito;
-      const t = c.tasa || tasaDe(m.fecha);
-      const usd = t ? bs / t : 0;
-      totBs += bs; totUsd += usd; if (!t) sinTasa++;
-      return `<tr data-id="${esc(m.id)}">
-        <td>${fmtFecha(m.fecha)}</td>
-        <td><input type="text" data-campo="factura" value="${esc(c.factura)}" style="min-width:70px"></td>
-        <td><input type="text" data-campo="beneficiario" value="${esc(c.beneficiario || (categoria(m).regla || {}).beneficiario || '')}"></td>
-        <td><input type="text" data-campo="descripcion" value="${esc(c.descripcion || (categoria(m).regla || {}).descripcion || '')}" placeholder="${esc(m.descripcion)}" style="min-width:200px"></td>
-        <td class="num">${fmt(bs)}</td>
-        <td><input type="number" step="0.0001" data-campo="tasa" value="${c.tasa || ''}" placeholder="${t ? t : 'falta'}" style="width:90px;min-width:90px"></td>
-        <td class="num"><b>${usd ? fmt(usd) : '—'}</b></td>
-        <td class="peq">${esc(m.referencia)}</td>
-        <td class="peq">${esc(cuentaDe(m))}</td>
-        <td><input type="text" data-campo="receptor" value="${esc(c.receptor)}" style="min-width:90px"></td>
-        <td style="white-space:nowrap"><button class="recordar" data-recordar="${esc(m.id)}" title="Crear una regla para que los próximos pagos como este se clasifiquen solos (con este beneficiario y descripción)">Recordar</button><button class="x" data-devolver="${esc(m.id)}" title="Quitar de esta página (vuelve a Extractos sin clasificar)">↩</button></td>
-      </tr>`;
+      const tasa = c.tasa || tasaDe(m.fecha);
+      out.push({
+        id: m.id, origen: 'banco', fecha: m.fecha, bs, tasa, usd: tasa ? bs / tasa : 0,
+        factura: c.factura || '', beneficiario: c.beneficiario || regla.beneficiario || '',
+        descripcion: c.descripcion || regla.descripcion || '', descBanco: m.descripcion,
+        referencia: m.referencia, banco: cuentaDe(m), receptor: c.receptor || '',
+        presentacion: c.presentacion || '', precio: c.precio || 0, producto: c.producto || '', socio: c.socio || '',
+      });
+    }
+    for (const r of (E.manuales[cat] || [])) {
+      const bs = +r.bs || 0;
+      const tasa = r.tasaManual || (bs && r.fecha ? tasaDe(r.fecha) : 0);
+      out.push(Object.assign({}, r, { origen: 'manual', bs, tasa, usd: bs ? (tasa ? bs / tasa : 0) : (+r.usd || 0), descBanco: '' }));
+    }
+    out.sort((x, y) => (x.fecha || '9999') < (y.fecha || '9999') ? -1 : (x.fecha || '9999') > (y.fecha || '9999') ? 1 : 0);
+    return out;
+  }
+  // Total de una página en Bs y $ (en Gastos fijos incluye las comisiones bancarias)
+  function totales(cat) {
+    let bs = 0, usd = 0;
+    for (const x of items(cat)) { bs += x.bs; usd += x.usd; }
+    if (cat === 'fijo') for (const x of comisionesPorCuenta()) { bs += x.bs; usd += x.tasa ? x.bs / x.tasa : 0; }
+    return { bs: r2(bs), usd: r2(usd) };
+  }
+
+  // ---------- render: páginas de gastos, compras y anticipos ----------
+  const BANCOS_LISTA = CUENTAS.concat(['EFECTIVO', 'DIVISAS']);
+  function celda(x, campo, ancho, tipo) {
+    const v = x[campo];
+    const val = tipo === 'number' ? (v ? v : '') : v;
+    return `<td><input type="${tipo || 'text'}" ${tipo === 'number' ? 'step="any"' : ''} data-campo="${campo}" value="${esc(val)}" style="min-width:${ancho || 80}px;width:100%"${campo === 'banco' || campo === 'receptor' ? ' list="listaBancos"' : ''}${campo === 'producto' ? ' list="listaProductos"' : ''}></td>`;
+  }
+  function renderCat(cat) {
+    const lista = items(cat);
+    const el = $('#p-' + cat);
+    const tot = totales(cat);
+    const sinTasa = lista.filter((x) => x.bs && !x.tasa).length;
+    const esSocio = cat === 'socio', esCompra = cat === 'compra';
+    const socios = E.socios || [];
+    const filas = lista.map((x) => {
+      const man = x.origen === 'manual';
+      const fecha = man ? `<td><input type="date" data-campo="fecha" value="${esc(x.fecha)}" style="width:130px"></td>` : `<td>${fmtFecha(x.fecha)}</td>`;
+      const bs = man ? celda(x, 'bs', 100, 'number') : `<td class="num">${fmt(x.bs)}</td>`;
+      const usd = man && !x.bs ? `<td><input type="number" step="any" data-campo="usd" value="${x.usd || ''}" placeholder="${x.ref ? 'ref. ' + x.ref : '$'}" style="width:90px"></td>` : `<td class="num"><b>${x.usd ? fmt(x.usd) : '—'}</b></td>`;
+      const tasa = `<td><input type="number" step="0.0001" data-campo="tasa" value="${(man ? x.tasaManual : (E.clasif[x.id] || {}).tasa) || ''}" placeholder="${x.tasa ? x.tasa : (x.bs ? 'falta' : '')}" style="width:90px;min-width:90px"></td>`;
+      const ref = man ? celda(x, 'referencia', 80) : `<td class="peq">${esc(x.referencia)}</td>`;
+      const banco = man ? celda(x, 'banco', 110) : `<td class="peq">${esc(x.banco)}</td>`;
+      const desc = `<td><input type="text" data-campo="descripcion" value="${esc(x.descripcion)}" placeholder="${esc(x.descBanco)}" style="min-width:200px;width:100%"></td>`;
+      const acciones = man
+        ? `<td><button class="x" data-borrar-man="${esc(x.id)}" title="Borrar esta fila">✕</button></td>`
+        : `<td style="white-space:nowrap"><button class="recordar" data-recordar="${esc(x.id)}" title="Crear una regla para que los próximos pagos como este se clasifiquen solos (con este beneficiario y descripción)">Recordar</button><button class="x" data-devolver="${esc(x.id)}" title="Quitar de esta página (vuelve a Extractos sin clasificar)">↩</button></td>`;
+      if (esSocio) {
+        return `<tr data-id="${esc(x.id)}" data-cat="${cat}">${fecha}
+          <td><select data-campo="socio" class="${x.socio ? '' : 'clasif vacio'}">${opciones([['', '¿Qué socio?']].concat(socios.map((s) => [s, s])), x.socio)}</select></td>
+          ${desc}${bs}${tasa}${usd}${ref}${banco}${celda(x, 'receptor', 100)}${acciones}</tr>`;
+      }
+      return `<tr data-id="${esc(x.id)}" data-cat="${cat}">${fecha}${celda(x, 'factura', 70)}${celda(x, 'beneficiario', 140)}${desc}${bs}${tasa}${usd}${ref}${banco}${celda(x, 'receptor', 90)}
+        ${esCompra ? celda(x, 'presentacion', 90) + celda(x, 'precio', 70, 'number') + celda(x, 'producto', 150) : ''}${acciones}</tr>`;
     });
+    const cab = esSocio
+      ? '<th>Fecha</th><th>Socio</th><th>Descripción</th><th class="num">Bolívares</th><th>Tasa</th><th class="num">Monto $</th><th>Referencia</th><th>Banco</th><th>Banco destino</th><th></th>'
+      : '<th>Fecha</th><th>Factura</th><th>Beneficiario</th><th>Descripción</th><th class="num">Bolívares</th><th>Tasa</th><th class="num">Monto $</th><th>Referencia</th><th>Banco</th><th>Banco receptor</th>' +
+        (esCompra ? '<th>Presentación</th><th>Precio $</th><th>Producto del inventario</th>' : '') + '<th></th>';
+    let extra = '';
+    if (esSocio) {
+      const porSocio = {};
+      for (const x of lista) porSocio[x.socio || '(sin socio)'] = (porSocio[x.socio || '(sin socio)'] || 0) + x.bs;
+      extra = `<div class="totales">${Object.keys(porSocio).map((k) => `<div>${esc(k)}<b>${fmt(porSocio[k]) || '0,00'} Bs</b></div>`).join('')}</div>`;
+    }
+    const ayuda = {
+      fijo: 'Los gastos pagados en divisas o efectivo no salen en los bancos: agréguelos con "Agregar fila" (si no tiene Bolívares, escriba el monto directo en $).',
+      extra: 'Los gastos pagados en divisas o efectivo no salen en los bancos: agréguelos con "Agregar fila".',
+      compra: 'Si escribe el <b>Precio $</b> y el <b>Producto del inventario</b>, el precio de ese producto en el Inventario se actualiza solo con la última compra.',
+      socio: 'Vales y anticipos entregados a los socios. Los movimientos del banco clasificados como "Vale / anticipo socio" aparecen aquí; elija a qué socio corresponde. En el Resumen se descuentan del reparto de cada socio.',
+    }[cat];
     el.innerHTML = `
       <div class="totales">
-        <div>Movimientos<b>${lista.length}</b></div>
-        <div>Total Bolívares<b>${fmt(totBs) || '0,00'}</b></div>
-        <div>Total $<b>${fmt(totUsd) || '0,00'}</b></div>
-        ${sinTasa ? `<div style="background:var(--warn-soft)">Sin tasa<b>${sinTasa}</b><span class="peq">Cargue las tasas en "Tasas BCV"</span></div>` : ''}
+        <div>Filas<b>${lista.length}</b></div>
+        <div>Total Bolívares<b>${fmt(tot.bs) || '0,00'}</b></div>
+        <div>Total $<b>${fmt(tot.usd) || '0,00'}</b>${cat === 'fijo' ? '<span class="peq">incluye comisiones</span>' : ''}</div>
+        ${sinTasa ? `<div style="background:var(--warn-soft)">Sin tasa<b>${sinTasa}</b><span class="peq">Revise "Tasas BCV"</span></div>` : ''}
+      </div>
+      ${extra}
+      <div class="fila-flex" style="margin-bottom:10px">
+        <button class="btn primario" data-agregar="${cat}">+ Agregar fila</button>
+        ${cat === 'fijo' ? '<button class="btn" id="recurrentes">+ Agregar gastos recurrentes del mes (nómina, delivery, alquiler…)</button>' : ''}
+        <span class="peq">${ayuda}</span>
       </div>
       ${cat === 'fijo' ? tablaComisiones() : ''}
-      <div class="tabla-wrap">${lista.length ? `<table>
-        <tr><th>Fecha</th><th>Factura</th><th>Beneficiario</th><th>Descripción</th><th class="num">Bolívares</th><th>Tasa</th><th class="num">Monto $</th><th>Referencia</th><th>Banco</th><th>Banco receptor</th><th></th></tr>
-        ${filas.join('')}</table>` : `<div class="vacio-msg">No hay movimientos clasificados como "${esc(NOMBRE_CAT[cat])}". Clasifíquelos en la página Extractos bancarios.</div>`}
-      </div>`;
+      <div class="tabla-wrap">${lista.length ? `<table><tr>${cab}</tr>${filas.join('')}</table>` : `<div class="vacio-msg">Todavía no hay filas. Clasifique movimientos en Extractos bancarios o use "Agregar fila".</div>`}</div>`;
+  }
+
+  // Mes de trabajo como "AAAA-MM" (del campo Mes, o de los movimientos)
+  const MESES = ['ENERO', 'FEBRERO', 'MARZO', 'ABRIL', 'MAYO', 'JUNIO', 'JULIO', 'AGOSTO', 'SEPTIEMBRE', 'OCTUBRE', 'NOVIEMBRE', 'DICIEMBRE'];
+  function mesTrabajo() {
+    const m = (E.mes || '').toUpperCase().match(/([A-ZÁÉÍÓÚ]+)\s+(\d{4})/);
+    if (m && MESES.includes(m[1])) return m[2] + '-' + String(MESES.indexOf(m[1]) + 1).padStart(2, '0');
+    if (E.movs.length) return E.movs[Math.floor(E.movs.length / 2)].fecha.slice(0, 7);
+    return iso(new Date()).slice(0, 7);
+  }
+  function diasDelMes() {
+    const [y, m] = mesTrabajo().split('-').map(Number);
+    const n = new Date(y, m, 0).getDate();
+    return Array.from({ length: n }, (_, i) => y + '-' + String(m).padStart(2, '0') + '-' + String(i + 1).padStart(2, '0'));
+  }
+  let nId = Date.now();
+  const nuevoId = () => 'man-' + (nId++).toString(36);
+
+  // Crea las filas de gastos recurrentes del mes según PLANTILLA_FIJOS
+  function agregarRecurrentes() {
+    const dias = diasDelMes(), ultimo = dias[dias.length - 1];
+    const nuevas = [];
+    const ddmm = (f) => f.slice(8, 10) + '/' + f.slice(5, 7);
+    for (const p of (window.PLANTILLA_FIJOS || [])) {
+      if (p.frecuencia === 'semanal') {
+        // Semanas de lunes a domingo cuyo lunes cae en el mes (la semana 26/10–01/11 ya fue en octubre)
+        for (const f of dias) {
+          const d = new Date(+f.slice(0, 4), +f.slice(5, 7) - 1, +f.slice(8, 10));
+          if (d.getDay() !== 1) continue;
+          const fin = new Date(d); fin.setDate(d.getDate() + 6);
+          const fFin = iso(fin);
+          nuevas.push({ fecha: fFin > ultimo ? ultimo : fFin, descripcion: `${p.descripcion} ${ddmm(f)} al ${fmtFecha(fFin)}`, usd: p.usd || 0, ref: p.ref });
+        }
+      } else if (p.frecuencia === 'quincenal') {
+        nuevas.push({ fecha: dias[14], descripcion: p.descripcion, usd: p.usd || 0, ref: p.ref });
+        nuevas.push({ fecha: ultimo, descripcion: p.descripcion, usd: p.usd || 0, ref: p.ref });
+      } else {
+        nuevas.push({ fecha: ultimo, descripcion: p.descripcion + (/FIN DE MES/.test(p.descripcion) ? ' ' + (E.mes || '').toUpperCase() : ''), usd: p.usd || 0, ref: p.ref });
+      }
+    }
+    const ya = new Set(E.manuales.fijo.map((r) => r.descripcion + '|' + r.fecha));
+    let n = 0;
+    for (const r of nuevas) {
+      if (ya.has(r.descripcion + '|' + r.fecha)) continue;
+      E.manuales.fijo.push(Object.assign({ id: nuevoId(), factura: '', beneficiario: '', bs: 0, tasaManual: 0, referencia: '', banco: 'DIVISAS', receptor: '' }, r));
+      n++;
+    }
+    guardar(); render();
+    toast(n ? `${n} gastos recurrentes agregados: complete los montos` : 'Los gastos recurrentes de este mes ya estaban agregados');
   }
 
   // Comisiones bancarias del mes agrupadas por cuenta (en el cierre van como una línea por banco en GASTOS FIJOS)
@@ -259,7 +386,7 @@
     return `<div class="panel"><h2>Comisiones bancarias del mes</h2>
       <p class="peq">Se suman solas por cuenta y salen en el Excel como "COMISIONES BANCARIAS &lt;CUENTA&gt;", igual que en el cierre. Se usa la tasa del último día.</p>
       <table><tr><th>Descripción</th><th class="num">Bolívares</th><th class="num">Tasa</th><th class="num">Monto $</th></tr>
-      ${l.map((x) => `<tr><td>COMISIONES BANCARIAS ${esc(x.cuenta)}</td><td class="num">${fmt(x.bs)}</td><td class="num">${x.tasa || '—'}</td><td class="num">${x.tasa ? fmt(x.bs / x.tasa) : '—'}</td></tr>`).join('')}
+      ${l.map((x) => `<tr><td>COMISIONES BANCARIAS ${esc(x.cuenta)}</td><td class="num">${fmt(x.bs)}</td><td class="num">${x.tasa ? x.tasa.toLocaleString('es-VE', { minimumFractionDigits: 4 }) : '—'}</td><td class="num">${x.tasa ? fmt(x.bs / x.tasa) : '—'}</td></tr>`).join('')}
       <tr><td><b>Total comisiones</b></td><td class="num"><b>${fmt(tBs)}</b></td><td></td><td class="num"><b>${fmt(tUsd) || '—'}</b></td></tr></table></div>`;
   }
 
@@ -298,9 +425,10 @@
   }
 
   function renderBadges() {
-    const cuenta = { fijo: 0, extra: 0, compra: 0, pend: 0 };
+    const cuenta = { fijo: 0, extra: 0, compra: 0, socio: 0, pend: 0 };
     for (const m of E.movs) { const c = categoria(m).cat; if (c in cuenta) cuenta[c]++; if (!c) cuenta.pend++; }
-    for (const k in cuenta) $('#b-' + k).textContent = cuenta[k] || '';
+    for (const k of ['fijo', 'extra', 'compra', 'socio']) cuenta[k] += E.manuales[k].length;
+    for (const k in cuenta) { const b = $('#b-' + k); if (b) b.textContent = cuenta[k] || ''; }
     $('#b-pend').title = 'Movimientos sin clasificar';
   }
 
@@ -309,6 +437,7 @@
     renderCuentas(); renderMovs(); renderBadges();
     const activa = document.querySelector('nav button.activo').dataset.p;
     if (HOJA[activa]) renderCat(activa);
+    if (window.Cierre) Cierre.render(activa);
     if (activa === 'tasas') renderTasas();
     if (activa === 'reglas') renderReglas();
   }
@@ -340,53 +469,6 @@
     if (previa >= 0) E.reglas[previa] = regla; else E.reglas.unshift(regla);
     guardar(); render();
     toast('Regla guardada: "' + texto + '" → ' + NOMBRE_CAT[c.cat] + (otros.length ? ' (+' + otros.length + ' movimientos este mes)' : ''));
-  }
-
-  // ---------- exportar a Excel ----------
-  function exportar() {
-    if (!E.movs.length) return toast('No hay movimientos para exportar.');
-    const wb = XLSX.utils.book_new();
-    const titulo = 'FIN DE MES ' + (E.mes || '').toUpperCase();
-
-    // Hoja con todos los movimientos
-    const todos = [[titulo], ['EXTRACTOS BANCARIOS'], [], ['FECHA', 'BANCO', 'REFERENCIA', 'DESCRIPCION BANCO', 'EGRESO Bs', 'INGRESO Bs', 'SALDO', 'CLASIFICACION', 'BENEFICIARIO', 'DESCRIPCION']];
-    for (const m of E.movs) {
-      const c = E.clasif[m.id] || {};
-      todos.push([fechaExcel(m.fecha), cuentaDe(m), m.referencia, m.descripcion, m.debito || null, m.credito || null, m.saldo || null, NOMBRE_CAT[categoria(m).cat] === '— Elegir —' ? 'SIN CLASIFICAR' : NOMBRE_CAT[categoria(m).cat].toUpperCase(), c.beneficiario || '', c.descripcion || '']);
-    }
-    const wsT = XLSX.utils.aoa_to_sheet(todos);
-    formato(wsT, todos.length, { A: 'dd/mm/yyyy', E: '#,##0.00', F: '#,##0.00', G: '#,##0.00' });
-    wsT['!cols'] = [12, 22, 16, 45, 14, 14, 16, 22, 28, 35].map((w) => ({ wch: w }));
-    XLSX.utils.book_append_sheet(wb, wsT, 'EXTRACTOS');
-
-    // Una hoja por categoría con las mismas columnas del cierre de mes
-    for (const cat of ['fijo', 'extra', 'compra']) {
-      const filas = [[titulo], [HOJA[cat]], [], ['FECHA', 'FACTURA', 'BENEFICIARIO', 'DESCRIPCION', 'BOLIVARES', 'TASA', 'MONTO', 'REFERENCIA ', 'BANCO', 'BANCO RECEPTOR']];
-      const lista = filasCat(cat);
-      lista.forEach((m, i) => {
-        const c = E.clasif[m.id] || {};
-        const r = i + 5;
-        const t = c.tasa || tasaDe(m.fecha) || null;
-        filas.push([fechaExcel(m.fecha), c.factura || '', c.beneficiario || (categoria(m).regla || {}).beneficiario || '', c.descripcion || (categoria(m).regla || {}).descripcion || m.descripcion, m.debito || m.credito, t, t ? { f: `+E${r}/F${r}` } : null, m.referencia, cuentaDe(m), c.receptor || '']);
-      });
-      let fin = lista.length + 4;
-      if (cat === 'fijo') {
-        for (const x of comisionesPorCuenta()) {
-          fin++;
-          filas.push([x.fecha ? fechaExcel(x.fecha) : '', '', '', 'COMISIONES BANCARIAS ' + x.cuenta, x.bs, x.tasa || null, x.tasa ? { f: `+E${fin}/F${fin}` } : null, '', x.cuenta, '']);
-        }
-      }
-      filas.push([], ['', '', '', 'TOTAL', { f: `SUM(E5:E${fin})` }, '', { f: `SUM(G5:G${fin})` }]);
-      const ws = XLSX.utils.aoa_to_sheet(filas);
-      formato(ws, filas.length, { A: 'dd/mm/yyyy', E: '#,##0.00', F: '#,##0.0000', G: '#,##0.00' });
-      ws['!cols'] = [12, 10, 28, 40, 14, 10, 12, 16, 20, 18].map((w) => ({ wch: w }));
-      XLSX.utils.book_append_sheet(wb, ws, HOJA[cat]);
-    }
-    XLSX.writeFile(wb, 'EXTRACTOS ' + (E.mes || 'MES').toUpperCase() + '.xlsx');
-  }
-  function fechaExcel(f) { const [y, m, d] = f.split('-').map(Number); return new Date(y, m - 1, d); }
-  function formato(ws, n, cols) {
-    for (const c in cols) for (let r = 5; r <= n; r++) { const cel = ws[c + r]; if (cel && (cel.t === 'n' || cel.t === 'd' || cel.f)) cel.z = cols[c]; }
   }
 
   // ---------- eventos ----------
@@ -433,12 +515,19 @@
       renderBadges(); renderCuentas();
     } else if (t.matches('select.selCuenta')) {
       E.cuentasMap[t.dataset.clave] = t.value; guardar(); render();
-    } else if (t.matches('input[data-campo]')) {
-      const id = t.closest('tr').dataset.id, campo = t.dataset.campo;
-      E.clasif[id] = E.clasif[id] || { cat: categoria(E.movs.find((x) => x.id === id)).cat };
-      E.clasif[id][campo] = campo === 'tasa' ? (parseFloat(t.value) || 0) : t.value;
+    } else if (t.matches('[data-campo]') && t.closest('tr[data-cat]')) {
+      const tr = t.closest('tr'), id = tr.dataset.id, cat = tr.dataset.cat, campo = t.dataset.campo;
+      const numerico = ['tasa', 'bs', 'usd', 'precio'].includes(campo);
+      const valor = numerico ? (parseFloat(t.value) || 0) : t.value;
+      if (id.startsWith('man-')) {
+        const r = E.manuales[cat].find((x) => x.id === id);
+        r[campo === 'tasa' ? 'tasaManual' : campo] = valor;
+      } else {
+        E.clasif[id] = E.clasif[id] || { cat: categoria(E.movs.find((x) => x.id === id)).cat };
+        E.clasif[id][campo] = valor;
+      }
       guardar();
-      if (campo === 'tasa') render();
+      if (numerico || campo === 'fecha' || campo === 'socio' || campo === 'producto') render();
     } else if (t.matches('input[data-tasa]')) {
       E.tasas[t.dataset.tasa] = parseFloat(t.value) || 0; guardar(); renderTasas();
     }
@@ -446,7 +535,19 @@
 
   document.addEventListener('click', (e) => {
     const t = e.target;
-    if (t.dataset.recordar) {
+    if (t.dataset.agregar) {
+      const cat = t.dataset.agregar;
+      E.manuales[cat].push({ id: nuevoId(), fecha: '', factura: '', beneficiario: '', descripcion: '', bs: 0, usd: 0, tasaManual: 0, referencia: '', banco: '', receptor: '', socio: '' });
+      guardar(); render();
+      const filas = document.querySelectorAll('#p-' + cat + ' tr[data-id^="man-"]');
+      const ult = [...filas].find((f) => f.dataset.id === E.manuales[cat][E.manuales[cat].length - 1].id);
+      if (ult) { ult.scrollIntoView({ block: 'center' }); ult.querySelector('input').focus(); }
+    } else if (t.dataset.borrarMan) {
+      for (const k in E.manuales) E.manuales[k] = E.manuales[k].filter((x) => x.id !== t.dataset.borrarMan);
+      guardar(); render();
+    } else if (t.id === 'recurrentes') {
+      agregarRecurrentes();
+    } else if (t.dataset.recordar) {
       recordar(t.dataset.recordar);
     } else if (t.dataset.devolver) {
       const id = t.dataset.devolver; E.clasif[id] = Object.assign(E.clasif[id] || {}, { cat: '' });
@@ -484,7 +585,7 @@
     e.target.value = '';
   });
 
-  $('#exportar').addEventListener('click', exportar);
+  $('#exportar').addEventListener('click', () => Cierre.exportar());
   $('#respaldo').addEventListener('click', () => {
     const blob = new Blob([JSON.stringify(E)], { type: 'application/json' });
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
@@ -495,16 +596,26 @@
     try {
       const d = JSON.parse(await e.target.files[0].text());
       if (!d.movs) throw new Error();
-      E = Object.assign({ mes: '', cuentasMap: {}, archivos: [], movs: [], clasif: {}, tasas: {}, reglas: [] }, d);
+      E = Object.assign(nuevoEstado(), d);
+      completarEstado();
       guardar(); render(); toast('Respaldo cargado');
     } catch (err) { toast('Ese archivo no es un respaldo válido'); }
     e.target.value = '';
   });
   $('#nuevoMes').addEventListener('click', () => {
-    if (!confirm('Se borrarán los movimientos, clasificaciones y tasas de este mes (se conservan las reglas y las cuentas). ¿Ya descargó el Excel o guardó un respaldo?')) return;
-    E.movs = []; E.archivos = []; E.clasif = {}; E.tasas = {}; E.mes = '';
+    if (!confirm('Se borrarán los movimientos, ventas, gastos, anticipos y cantidades del inventario de este mes.\nSe conservan: reglas, cuentas, socios, productos y precios del inventario, y el inventario de este mes pasa a ser el "mes anterior".\n\n¿Ya descargó el Excel o guardó un respaldo?')) return;
+    if (window.Cierre) E.invAnterior = Cierre.inventarioComoAnterior();
+    for (const p of E.inventario || []) { p.bultos = 0; p.unidades = 0; }
+    const d = nuevoEstado();
+    Object.assign(E, { movs: [], archivos: [], clasif: {}, tasas: {}, mes: '', manuales: d.manuales, ventas: {}, ajustesDivisas: [], bancosManual: {}, efectivoBs: 0, divisas: 0, tasaCierre: 0,
+      reparto: { reserva: E.reparto.reserva, valeDivisa: {}, banesco: {} } });
     guardar(); render();
   });
 
+  // Funciones que usa cierre.js (ventas, bancos, inventario, resumen y Excel)
+  window.FM = {
+    get E() { return E; }, guardar, render, toast, esc, fmt, fmtFecha, opciones, r2, CUENTAS, HOJA, NOMBRE_CAT,
+    categoria, cuentaDe, tasaDe, items, totales, comisionesPorCuenta, mesTrabajo, diasDelMes, iso, nuevoId,
+  };
   render();
 })();

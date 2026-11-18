@@ -79,7 +79,7 @@
   <h1>Fin de Mes</h1>
   <label class="mes">Mes: <input id="mes" type="text" placeholder="NOVIEMBRE 2026"></label>
   <div class="acciones">
-    <button class="btn primario" id="exportar">Descargar Excel</button>
+    <button class="btn primario" id="exportar">Descargar Excel del cierre</button>
     <button class="btn" id="respaldo">Guardar respaldo</button>
     <button class="btn" id="restaurar">Abrir respaldo</button>
     <button class="btn" id="nuevoMes">Empezar mes nuevo</button>
@@ -88,9 +88,14 @@
 </header>
 <nav id="tabs">
   <button data-p="extractos" class="activo">Extractos bancarios <span class="badge" id="b-pend"></span></button>
+  <button data-p="ventas">Ventas</button>
   <button data-p="fijo">Gastos fijos <span class="badge" id="b-fijo"></span></button>
   <button data-p="extra">Gastos extras <span class="badge" id="b-extra"></span></button>
   <button data-p="compra">Compras <span class="badge" id="b-compra"></span></button>
+  <button data-p="socio">Anticipo socios <span class="badge" id="b-socio"></span></button>
+  <button data-p="bancos">Bancos y efectivo</button>
+  <button data-p="inventario">Inventario</button>
+  <button data-p="resumen">Resumen</button>
   <button data-p="tasas">Tasas BCV</button>
   <button data-p="reglas">Reglas automáticas</button>
 </nav>
@@ -123,6 +128,11 @@
   <section class="pagina" id="p-fijo"></section>
   <section class="pagina" id="p-extra"></section>
   <section class="pagina" id="p-compra"></section>
+  <section class="pagina" id="p-socio"></section>
+  <section class="pagina" id="p-ventas"></section>
+  <section class="pagina" id="p-bancos"></section>
+  <section class="pagina" id="p-inventario"></section>
+  <section class="pagina" id="p-resumen"></section>
 
   <section class="pagina" id="p-tasas">
     <div class="panel">
@@ -152,6 +162,8 @@
   </section>
 </main>
 <div id="toast"></div>
+<datalist id="listaBancos"><option value="BANESCO EMPRESA"><option value="BANESCO PERSONAL"><option value="BANCARIBE EMPRESA"><option value="BANCARIBE PERSONAL"><option value="MERCANTIL EMPRESA"><option value="MERCANTIL PERSONAL"><option value="BANCA AMIGA EMPRESA"><option value="BANCA AMIGA PERSONAL"><option value="VENEZUELA EMPRESA"><option value="EFECTIVO"><option value="DIVISAS"></datalist>
+<datalist id="listaProductos"></datalist>
 
 <script src="lib/xlsx.full.min.js"></script>
 <script src="lib/pdf.worker.min.js"></script>
@@ -159,6 +171,8 @@
 <script src="parsers.js"></script>
 <script src="reglas-base.js"></script>
 <script src="tasas-bcv.js"></script>
+<script src="datos-base.js"></script>
 <script src="app.js"></script>
+<script src="cierre.js"></script>
 </body>
 </html>
