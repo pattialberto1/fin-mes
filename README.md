@@ -12,15 +12,22 @@ Funciona en el navegador (Chrome o Edge) y no hay que instalar nada. **Los datos
 
 ## Uso cada mes
 
-1. **Descargar los extractos** de cada banco (ver la tabla de abajo) y arrastrarlos todos juntos al recuadro punteado.
-2. La primera vez, en la lista de cuentas, elegir **qué cuenta es** cada archivo. Esa elección queda guardada para los meses siguientes.
-3. En **Extractos bancarios**, usar la lista de la derecha (**Clasificación**) para elegir *Gasto fijo*, *Gasto extra* o *Compra*. El movimiento pasa a esa página.
-   - Las comisiones bancarias y los ingresos (ventas, puntos de venta, pagos móviles recibidos) se clasifican solos, en letra cursiva. Se pueden cambiar a mano.
-   - El botón **Sin clasificar** muestra solo lo que falta por revisar.
-4. En **Gastos fijos / Gastos extras / Compras** se completan la factura, el beneficiario y la descripción.
-5. **Tasas BCV:** la herramienta ya trae las tasas oficiales del BCV (Bs/$, Venta, por Fecha Valor) del 01/10/2026 al 17/11/2026. Los fines de semana y feriados usan la tasa del último día hábil. Para los días nuevos, se descarga de bcv.org.ve → Estadísticas → Tipo de cambio de referencia el Excel del trimestre (ej. `2_1_2d26_smc.xls`) y se abre con el botón **Importar Excel del BCV**. Cualquier día se puede corregir a mano.
-6. **Descargar Excel**: genera un archivo con las hojas EXTRACTOS, GASTOS FIJOS, GASTOS EXTRAS y COMPRAS, con las mismas columnas del cierre (el MONTO lleva la fórmula Bolívares ÷ Tasa).
-7. **Empezar mes nuevo** borra los movimientos y conserva las cuentas y las reglas.
+El cierre completo se hace en la web y al final se descarga el Excel del cierre, con las mismas hojas y fórmulas del archivo de cierre de mes.
+
+| Pestaña | Qué hacer | Qué se hace solo |
+|---|---|---|
+| **Extractos bancarios** | Arrastrar los extractos de todos los bancos y clasificar los egresos con la lista de la derecha | Comisiones e ingresos se clasifican solos, igual que los pagos que tienen una regla |
+| **Ventas** | Escribir la venta diaria en $ (bolívares en efectivo, divisas, total del sistema) | **Llenar desde los bancos** completa punto de venta, pago móvil y biopago con lo que entró a los bancos ese día. También hace el control de divisas |
+| **Gastos fijos / extras / Compras** | Completar factura, beneficiario y descripción. Con **+ Agregar fila** se cargan los pagos en divisas o efectivo, que no salen en el banco | **+ Agregar gastos recurrentes** crea la nómina y el delivery de cada semana, el alquiler, el mantenimiento y el fin de mes. Las comisiones bancarias se suman por cuenta |
+| **Anticipo socios** | Elegir a qué socio corresponde cada vale | Los movimientos clasificados como "Vale / anticipo socio" aparecen aquí |
+| **Bancos y efectivo** | Escribir el efectivo en Bs y las divisas contadas | El saldo de cada cuenta se toma del último movimiento de su extracto |
+| **Inventario** | Contar y escribir bultos y unidades | Los totales se calculan solos. El precio se actualiza con la última compra si en Compras se indica "Producto del inventario" y "Precio $". **Copiar cantidades del mes anterior** sirve como punto de partida |
+| **Resumen** | Revisar los números. En el reparto, escribir los vales en divisa y las divisas en Banesco de cada socio | Todo lo demás se calcula solo: ventas, gastos, ganancia bruta y neta, cuadre (debería quedar contra lo que hay), inventario contra el mes anterior y reparto entre socios |
+| **Tasas BCV** | Importar el Excel del BCV para los días nuevos | Se usa la tasa de cada día y la del último día como tasa de cierre |
+
+**Descargar Excel del cierre** genera estas hojas: VENTAS, BANCOS Y EFECTIVO, GASTOS EXTRAS, GASTOS FIJOS, COMPRAS, INVENTARIO, ANTICIPO SOCIOS, RESUMEN y EXTRACTOS. Llevan fórmulas, así que si se corrige un número en Excel el resumen se recalcula.
+
+**Empezar mes nuevo** borra los datos del mes y conserva las reglas, las cuentas, los socios y los productos con sus precios. El inventario del mes pasa a ser el "mes anterior".
 
 ### Para ahorrar tiempo: Reglas automáticas
 
