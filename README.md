@@ -50,11 +50,12 @@ El trabajo se guarda solo en el navegador de esa computadora. **Guardar respaldo
 
 | Banco | Archivo que se descarga | Notas |
 |---|---|---|
-| Banesco (empresa y personal) | `.xls` con nombre del RIF/CI (ej. `J503822244.xls`) | RIF que empieza con J = Empresa; V = Personal |
+| Banesco (empresa y personal) | `.xls` con el RIF o la CI en el nombre (ej. `J503822244.xls`) | RIF J = Empresa, V = Personal |
 | Bancamiga | `Movimientos_DDMMAAAA.xls` | La cuenta se reconoce por su número |
-| Bancaribe (Conexión Bancaribe) | PDF de "Movimientos" | |
-| Excel con columnas Fecha / Referencia / Descripción / Egreso / Ingreso / Saldo | `.xlsx` (ej. `noviembre.xlsx`) | Se tomó como Mercantil Empresa: **confirmar** |
-| Excel con columnas Fecha y hora / Referencia / Tipo de operación / Monto / Disponible | `Movimientos.xlsx` | Se tomó como Bancaribe Empresa: **confirmar** |
-| Banco de Venezuela | ⚠️ falta | El "Histórico de operaciones" no es un estado de cuenta. Hay que descargar los movimientos de la cuenta |
+| Bancaribe | PDF de "Movimientos" o Excel de Mi Conexión | Si se cargan los dos de la misma cuenta, los movimientos no se duplican |
+| Bancaribe (otro formato Excel) | `Movimientos.xlsx` (Fecha y hora / Tipo de operación / Monto) | Se toma como Bancaribe Empresa |
+| Mercantil Empresa | `.xlsx` con columnas Egreso / Ingreso / Saldo | |
+| Mercantil cuenta corriente | `.xlsx` con columnas Tipo / Fecha / Referencia / Descripción / Monto Bs. | Se toma como Mercantil Personal. El saldo de cada movimiento se calcula desde el saldo final |
+| Banco de Venezuela | `.xlsx` de movimientos (Día / Referencia / Descripción / Fecha / Tipo de Movimiento / Crédito / Débito / Saldo) | El "Histórico de operaciones" no sirve: no es un estado de cuenta |
 
 Si un banco cambia su formato o se agrega otro, el lector está en `app/parsers.js`.
