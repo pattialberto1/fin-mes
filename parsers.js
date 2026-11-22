@@ -142,7 +142,7 @@
       if (!f) continue;
       movimientos.push(mov(f, row[i.r], row[i.c], num(row[i.k]) - num(row[i.d]), num(row[i.s])));
     }
-    return { formato: 'Bancamiga', claveCuenta: 'bancamiga:' + cuenta, cuentaSugerida: '', numeroCuenta: cuenta, movimientos };
+    return { formato: 'Bancamiga', claveCuenta: 'bancamiga:' + cuenta, cuentaSugerida: 'BANCA AMIGA EMPRESA', numeroCuenta: cuenta, movimientos };
   }
 
   // Excel con "Nro. Cuenta" y columnas Fecha | Referencia | Descripción | Egreso | Ingreso | Saldo
@@ -230,7 +230,7 @@
     }
     let saldo = saldoFinal || 0;
     const movimientos = filas.map((x) => { const mv = mov(x.f, x.r, x.d, x.monto, Math.round(saldo * 100) / 100); saldo -= x.monto; return mv; });
-    return { formato: 'Mercantil (cuenta corriente)', claveCuenta: 'mercantil:' + (cuenta || 'cc'), cuentaSugerida: 'MERCANTIL PERSONAL', numeroCuenta: cuenta ? '****' + cuenta : '', movimientos };
+    return { formato: 'Mercantil (cuenta corriente)', claveCuenta: 'mercantil:' + (cuenta || 'cc'), cuentaSugerida: 'MERCANTIL EMPRESA', numeroCuenta: cuenta ? '****' + cuenta : '', movimientos };
   }
 
   // Bancaribe (Mi Conexión, Excel sin encabezados): 1.ª fila = número de cuenta; luego
@@ -240,7 +240,7 @@
     if (filas.length < 1 || filas.length < (m.length - 2) / 2) return null;
     const cuenta = String(typeof m[0][0] === 'number' ? BigInt(Math.round(m[0][0])).toString() : m[0][0]).replace(/\D/g, '');
     const movimientos = filas.map((r) => mov(fecha(r[0]), r[1], r[2], String(r[3]).trim() === 'D' ? -r[4] : r[4], num(r[6])));
-    return { formato: 'Bancaribe (Excel)', claveCuenta: claveBancaribe(cuenta), cuentaSugerida: 'BANCARIBE PERSONAL', numeroCuenta: cuenta, movimientos };
+    return { formato: 'Bancaribe (Excel)', claveCuenta: claveBancaribe(cuenta), cuentaSugerida: 'BANCARIBE EMPRESA', numeroCuenta: '', movimientos }; // el número viene redondeado: no se muestra
   }
   // El Excel de Bancaribe trae el número de cuenta redondeado (1.14017E+18): se identifica la cuenta por sus primeros 13 dígitos
   const claveBancaribe = (cuenta) => 'bancaribe:' + String(cuenta).replace(/^0+/, '').slice(0, 13);
@@ -295,8 +295,7 @@
       }
     }
     if (!movimientos.length) return null;
-    const personas = /Bancaribe Personas/i.test(textoTotal);
-    return { formato: 'PDF Bancaribe', claveCuenta: claveBancaribe(cuenta), cuentaSugerida: personas ? 'BANCARIBE PERSONAL' : 'BANCARIBE EMPRESA', numeroCuenta: cuenta, movimientos };
+    return { formato: 'PDF Bancaribe', claveCuenta: claveBancaribe(cuenta), cuentaSugerida: 'BANCARIBE EMPRESA', numeroCuenta: cuenta, movimientos };
   }
 
   function probar(tablas, nombre) {

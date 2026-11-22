@@ -40,6 +40,25 @@
       E.invAnterior = { mes: INVENTARIO_BASE.mes, total: INVENTARIO_BASE.total, items: Object.fromEntries(INVENTARIO_BASE.items.map((i) => [i.nombre, { bultos: i.bultos, unidades: i.unidades }])) };
     }
     if (!E.socios) E.socios = (window.SOCIOS_BASE || []).slice();
+    // Ajuste único (nov. 2026): Bancamiga, Mercantil cuenta corriente y Bancaribe son cuentas de la empresa,
+    // y la cuenta de Bancaribe del PDF se identifica igual que en el Excel (primeros 13 dígitos).
+    if ((E.migracion || 0) < 1) {
+      const nueva = (k) => k.startsWith('bancaribe:') ? 'bancaribe:' + k.slice(10).replace(/^0+/, '').slice(0, 13) : k;
+      for (const m of E.movs) m.claveCuenta = nueva(m.claveCuenta);
+      const vistos = new Set();
+      for (const x of E.archivos) { x.claveCuenta = nueva(x.claveCuenta); if (x.formato === 'Bancaribe (Excel)') x.numeroCuenta = ''; }
+      E.archivos.sort((x, y) => String(y.numeroCuenta || '').length - String(x.numeroCuenta || '').length);
+      E.archivos = E.archivos.filter((x) => { if (vistos.has(x.claveCuenta)) return false; vistos.add(x.claveCuenta); return true; });
+      const mapa = {};
+      for (const k in E.cuentasMap) mapa[nueva(k)] = E.cuentasMap[k];
+      for (const x of E.archivos) {
+        const k = x.claveCuenta;
+        if (k.startsWith('bancamiga:') && !mapa[k]) mapa[k] = 'BANCA AMIGA EMPRESA';
+        if ((k.startsWith('mercantil:') || k.startsWith('bancaribe:')) && /PERSONAL$/.test(mapa[k] || '')) mapa[k] = mapa[k].replace(/PERSONAL$/, 'EMPRESA');
+      }
+      E.cuentasMap = mapa;
+      E.migracion = 1;
+    }
   }
   completarEstado();
   // Reglas de fábrica: se agregan una vez por versión (si la administradora borra una, no vuelve)
