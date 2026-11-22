@@ -127,13 +127,24 @@
         const r = await Extractos.leerArchivo(file.name, buf);
         if (r.aviso) avisos.push(`<b>${esc(file.name)}:</b> ${esc(r.aviso)}`);
         if (!(r.claveCuenta in E.cuentasMap) && r.cuentaSugerida) E.cuentasMap[r.claveCuenta] = r.cuentaSugerida;
-        const vistos = {};
+        // Además del id, se compara por cuenta + fecha + monto + saldo: así no se duplican los movimientos
+        // si se carga la misma cuenta en dos formatos (ej. el PDF y el Excel de Bancaribe).
+        const cuentaNueva = E.cuentasMap[r.claveCuenta] || r.claveCuenta;
+        const huellas = {};
+        for (const m of E.movs) {
+          if ((E.cuentasMap[m.claveCuenta] || m.claveCuenta) !== cuentaNueva) continue;
+          const k = [m.fecha, m.debito, m.credito, m.saldo].join('|');
+          huellas[k] = (huellas[k] || 0) + 1;
+        }
+        const vistos = {}, vistosH = {};
         let n = 0;
         for (const m of r.movimientos) {
           const base = [r.claveCuenta, m.fecha, m.referencia, m.debito, m.credito, m.saldo, m.descripcion].join('|');
           vistos[base] = (vistos[base] || 0) + 1;
           const id = base + '|' + vistos[base];
-          if (existentes.has(id)) { repetidos++; continue; }
+          const h = [m.fecha, m.debito, m.credito, m.saldo].join('|');
+          vistosH[h] = (vistosH[h] || 0) + 1;
+          if (existentes.has(id) || vistosH[h] <= (huellas[h] || 0)) { repetidos++; continue; }
           existentes.add(id);
           E.movs.push(Object.assign({ id, claveCuenta: r.claveCuenta, archivo: file.name }, m));
           n++;

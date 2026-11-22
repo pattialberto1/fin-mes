@@ -76,7 +76,8 @@
   // Excel real -> matriz (primera hoja)
   function tablaExcel(buf, reparar) {
     if (reparar) buf = repararXlsx(buf);
-    const wb = XLSX.read(buf, { type: 'array', cellDates: true });
+    // Fechas como número de serie de Excel (se convierten en fecha() sin depender de la zona horaria)
+    const wb = XLSX.read(buf, { type: 'array' });
     return wb.SheetNames.map((n) => XLSX.utils.sheet_to_json(wb.Sheets[n], { header: 1, raw: true, defval: '' }));
   }
 
@@ -190,7 +191,61 @@
     };
   }
 
-  const LECTORES_TABLA = [historicoBDV, bancamiga, egresoIngreso, fechaHoraMonto];
+  // Banco de Venezuela (BDV en línea, "Movimientos"): Día | Referencia | Descripción | Fecha | Tipo de Movimiento | Crédito | Débito | Saldo
+  function bdv(m) {
+    const h = filaEncabezado(m, 'referencia', 'descripcion', 'fecha', 'tipo de movimiento', 'credito', 'debito', 'saldo');
+    if (h < 0) return null;
+    const i = { r: col(m[h], 'referencia'), d: col(m[h], 'descripcion'), f: col(m[h], 'fecha'), c: col(m[h], 'credito'), b: col(m[h], 'debito'), s: col(m[h], 'saldo') };
+    const movimientos = [];
+    for (const row of m.slice(h + 1)) {
+      const f = fecha(row[i.f]), d = limpiar(row[i.d]);
+      if (!f || /^saldo (inicial|final)/i.test(d)) continue;
+      movimientos.push(mov(f, row[i.r], d, Math.abs(num(row[i.c])) - Math.abs(num(row[i.b])), num(row[i.s])));
+    }
+    return { formato: 'Banco de Venezuela', claveCuenta: 'bdv:movimientos', cuentaSugerida: 'VENEZUELA EMPRESA', movimientos };
+  }
+
+  // Mercantil en línea (cuenta corriente): Tipo | Fecha | Referencia | Descripción | Monto Bs. (sin columna de saldo,
+  // de lo más nuevo a lo más viejo, con una fila "SALDO FINAL" arriba). El saldo de cada movimiento se calcula.
+  function mercantilMonto(m) {
+    const h = filaEncabezado(m, 'tipo', 'fecha', 'referencia', 'descripcion', 'monto');
+    if (h < 0 || col(m[h], 'saldo') >= 0) return null;
+    let cuenta = '', saldoFinal = null;
+    for (const r of m.slice(0, h)) {
+      const t = r.map((c) => String(c)).join(' ');
+      const c = t.match(/cuenta.*?(\d{4})\s*$/i); if (c) cuenta = c[1];
+      if (/saldo final/i.test(t)) saldoFinal = num(r[r.length - 1]);
+    }
+    const i = { t: col(m[h], 'tipo'), f: col(m[h], 'fecha'), r: col(m[h], 'referencia'), d: col(m[h], 'descripcion'), m: col(m[h], 'monto') };
+    const filas = [];
+    for (const row of m.slice(h + 1)) {
+      const f = fecha(row[i.f]), d = limpiar(row[i.d]);
+      if (!f) continue;
+      if (/^saldo final/i.test(d)) { saldoFinal = num(row[i.m]); continue; }
+      if (/^saldo inicial/i.test(d)) continue;
+      let monto = num(row[i.m]);
+      const tipo = String(row[i.t]).trim().toUpperCase();
+      if (tipo === 'ND') monto = -Math.abs(monto); else if (tipo === 'NC') monto = Math.abs(monto);
+      filas.push({ f, r: row[i.r], d, monto });
+    }
+    let saldo = saldoFinal || 0;
+    const movimientos = filas.map((x) => { const mv = mov(x.f, x.r, x.d, x.monto, Math.round(saldo * 100) / 100); saldo -= x.monto; return mv; });
+    return { formato: 'Mercantil (cuenta corriente)', claveCuenta: 'mercantil:' + (cuenta || 'cc'), cuentaSugerida: 'MERCANTIL PERSONAL', numeroCuenta: cuenta ? '****' + cuenta : '', movimientos };
+  }
+
+  // Bancaribe (Mi Conexión, Excel sin encabezados): 1.ª fila = número de cuenta; luego
+  // Fecha | Referencia | Descripción | D/C | Monto | Diferido | Disponible | Real
+  function bancaribeExcel(m) {
+    const filas = m.filter((r) => typeof r[0] === 'number' && r[0] > 30000 && r[0] < 80000 && /^[DC]$/.test(String(r[3]).trim()) && typeof r[4] === 'number');
+    if (filas.length < 1 || filas.length < (m.length - 2) / 2) return null;
+    const cuenta = String(typeof m[0][0] === 'number' ? BigInt(Math.round(m[0][0])).toString() : m[0][0]).replace(/\D/g, '');
+    const movimientos = filas.map((r) => mov(fecha(r[0]), r[1], r[2], String(r[3]).trim() === 'D' ? -r[4] : r[4], num(r[6])));
+    return { formato: 'Bancaribe (Excel)', claveCuenta: claveBancaribe(cuenta), cuentaSugerida: 'BANCARIBE PERSONAL', numeroCuenta: cuenta, movimientos };
+  }
+  // El Excel de Bancaribe trae el número de cuenta redondeado (1.14017E+18): se identifica la cuenta por sus primeros 13 dígitos
+  const claveBancaribe = (cuenta) => 'bancaribe:' + String(cuenta).replace(/^0+/, '').slice(0, 13);
+
+  const LECTORES_TABLA = [historicoBDV, bdv, bancamiga, egresoIngreso, fechaHoraMonto, mercantilMonto, bancaribeExcel];
 
   // ---------- PDF de Bancaribe (Conexión Bancaribe) ----------
   async function pdfBancaribe(buf) {
@@ -241,7 +296,7 @@
     }
     if (!movimientos.length) return null;
     const personas = /Bancaribe Personas/i.test(textoTotal);
-    return { formato: 'PDF Bancaribe', claveCuenta: 'bancaribe:' + cuenta, cuentaSugerida: personas ? 'BANCARIBE PERSONAL' : 'BANCARIBE EMPRESA', numeroCuenta: cuenta, movimientos };
+    return { formato: 'PDF Bancaribe', claveCuenta: claveBancaribe(cuenta), cuentaSugerida: personas ? 'BANCARIBE PERSONAL' : 'BANCARIBE EMPRESA', numeroCuenta: cuenta, movimientos };
   }
 
   function probar(tablas, nombre) {
