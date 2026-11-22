@@ -23,15 +23,25 @@
     return FM.tasaDe(dias[dias.length - 1]);
   }
 
-  // Saldo final de cada cuenta según su extracto: el movimiento cuyo saldo no es el "saldo anterior" de ningún otro.
-  function saldoExtracto(cuenta) {
-    const ms = E().movs.filter((m) => FM.cuentaDe(m) === cuenta);
-    if (!ms.length) return null;
+  // Saldo final de un extracto: el movimiento cuyo saldo no es el "saldo anterior" de ningún otro.
+  function saldoFinal(ms) {
     const previos = new Set(ms.map((m) => Math.round((m.saldo - m.credito + m.debito) * 100)));
     const finales = ms.filter((m) => !previos.has(Math.round(m.saldo * 100)));
     const lista = (finales.length ? finales : ms).slice().sort((a, b) => (a.fecha < b.fecha ? -1 : a.fecha > b.fecha ? 1 : 0));
     const ult = lista[lista.length - 1];
     return { saldo: r2(ult.saldo), fecha: ult.fecha };
+  }
+  // Una misma línea del cierre (ej. BANCA AMIGA EMPRESA) puede tener varias cuentas: se suman sus saldos.
+  function saldoExtracto(cuenta) {
+    const porClave = {};
+    for (const m of E().movs) if (FM.cuentaDe(m) === cuenta) (porClave[m.claveCuenta] = porClave[m.claveCuenta] || []).push(m);
+    const claves = Object.keys(porClave);
+    if (!claves.length) return null;
+    const detalle = claves.map((k) => {
+      const a = E().archivos.find((x) => x.claveCuenta === k) || {};
+      return Object.assign({ numero: a.numeroCuenta ? '…' + String(a.numeroCuenta).slice(-4) : '' }, saldoFinal(porClave[k]));
+    });
+    return { saldo: r2(detalle.reduce((s, d) => s + d.saldo, 0)), fecha: detalle.map((d) => d.fecha).sort().pop(), detalle };
   }
   function saldoCuenta(cuenta) {
     const man = E().bancosManual[cuenta];
@@ -193,14 +203,14 @@
     const filas = FM.CUENTAS.map((cta) => {
       const s = saldoExtracto(cta), man = e.bancosManual[cta];
       return `<tr><td>${esc(cta)}</td>
-        <td class="num">${s ? fmt(s.saldo) + `<span class="peq"> (${fmtFecha(s.fecha)})</span>` : '<span class="peq">sin extracto</span>'}</td>
+        <td class="num">${s ? (s.detalle.length > 1 ? s.detalle.map((d) => `<span class="peq">${esc(d.numero)} ${fmt(d.saldo)} (${fmtFecha(d.fecha)})</span><br>`).join('') + fmt(s.saldo) : fmt(s.saldo) + `<span class="peq"> (${fmtFecha(s.fecha)})</span>`) : '<span class="peq">sin extracto</span>'}</td>
         <td><input type="number" step="any" data-banco="${esc(cta)}" value="${man !== undefined && man !== '' && man !== null ? man : ''}" placeholder="${s ? 'usa el del extracto' : '0'}" style="width:160px"></td>
         <td class="num"><b>${fmt(saldoCuenta(cta)) || '0,00'}</b></td></tr>`;
     });
     $('#p-bancos').innerHTML = `
       <div class="panel" style="max-width:860px">
         <h2>Bancos (saldo al cierre, en Bolívares)</h2>
-        <p class="peq">El saldo se toma solo del último movimiento de cada extracto. Si el extracto no llega hasta el último día del mes o falta una cuenta, escriba el saldo a mano.</p>
+        <p class="peq">El saldo se toma solo del último movimiento de cada extracto (si una línea tiene varias cuentas, se suman). Si el extracto no llega hasta el último día del mes o falta una cuenta, escriba el saldo a mano.</p>
         <table><tr><th>Cuenta</th><th class="num">Según extracto</th><th>Escribir a mano</th><th class="num">Saldo usado</th></tr>${filas.join('')}
           <tr><td><b>TOTAL BANCOS</b></td><td></td><td></td><td class="num"><b>${fmt(c.bancosBs) || '0,00'}</b></td></tr></table>
       </div>
